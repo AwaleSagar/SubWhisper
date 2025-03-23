@@ -96,6 +96,35 @@ If you have a compatible GPU, you can speed up processing:
 python main.py --input video.mp4 --output subtitles.srt --whisper-model medium --gpu
 ```
 
+## Batch Processing
+
+For processing multiple video files at once, you can use the batch processing example:
+
+```bash
+python examples/batch_processing.py --input-dir /path/to/videos --output-dir /path/to/subtitles
+```
+
+The batch processing script supports the following arguments:
+
+```
+--input-dir, -i      Input directory containing video files (required)
+--output-dir, -o     Output directory for subtitle files (required)
+--format, -f         Subtitle format: srt, vtt, or ass (default: srt)
+--language, -l       Force specific language (ISO 639-1 code)
+--whisper-model, -m  Whisper model size: tiny, base, small, medium, or large (default: base)
+--gpu, -g            Use GPU acceleration if available
+--verbose, -v        Enable verbose logging
+--max-workers, -w    Maximum number of worker processes (default: 1)
+--extensions, -e     Comma-separated list of video file extensions to process 
+                     (default: mp4,avi,mkv,mov,webm,flv)
+```
+
+To process all .mp4 and .mkv files in a directory using the tiny model with 4 worker threads:
+
+```bash
+python examples/batch_processing.py --input-dir videos/ --output-dir subtitles/ --format srt --whisper-model tiny --extensions mp4,mkv --max-workers 4
+```
+
 ## Processing Long Videos
 
 For long videos, the tool will automatically process the audio in segments to manage memory usage. However, this might take considerable time depending on your hardware.
@@ -108,6 +137,29 @@ ffmpeg -i long_video.mp4 -ss 00:05:00 -t 00:10:00 -c copy segment.mp4
 
 # Process the segment
 python main.py --input segment.mp4 --output segment_subtitles.srt
+```
+
+## Non-interactive Mode
+
+When using SubWhisper in scripts or automated environments, you can use the API with the `no_prompt` parameter to prevent interactive prompts for model downloads:
+
+```python
+from src.utils.model_manager import load_model
+
+# Load model without prompting for confirmation
+success, model, message = load_model("whisper", "tiny", auto_download=True, no_prompt=True)
+```
+
+Similarly, when using the Speech Recognition API:
+
+```python
+from src.audio.speech import SpeechRecognizer
+
+# Initialize the recognizer
+recognizer = SpeechRecognizer(config)
+
+# Transcribe with no prompts
+transcription = recognizer.transcribe("audio.wav", language="en", no_prompt=True)
 ```
 
 ## Troubleshooting
@@ -149,6 +201,8 @@ When using the tool for the first time with a specific Whisper model size, the t
    ```
 3. Enter 'y' or 'yes' to download the model (this might take some time depending on your internet connection and the model size).
 4. Enter 'n' or 'no' to cancel and try a different model size.
+
+You can skip the prompt by using the API with the `no_prompt` parameter as described in the Non-interactive Mode section.
 
 Model sizes and approximate download sizes:
 - tiny: ~75 MB
@@ -192,4 +246,6 @@ video_input = VideoInput("video.mp4")
 audio_extractor = AudioExtractor(config)
 audio_path = audio_extractor.extract("video.mp4")
 # ... and so on
-``` 
+```
+
+Check the `examples/programmatic_usage.py` file for a more complete example of using SubWhisper as a library. 

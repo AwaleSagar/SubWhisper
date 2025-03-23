@@ -13,6 +13,9 @@ A standalone tool for audio extraction and automatic subtitle generation from vi
 - **Standalone Operation**: Works completely offline without external API dependencies
 - **GPU Acceleration**: Optional GPU support for faster processing
 - **On-demand Model Download**: Prompts for downloading Whisper models when needed
+- **Non-interactive Mode**: Support for automated/scripted operations with `no_prompt` parameter
+- **Batch Processing**: Process multiple videos at once with the batch processing example
+- **Comprehensive Testing**: Robust test suite ensuring reliability and accuracy
 
 ## Requirements
 
@@ -70,6 +73,12 @@ Use GPU acceleration for faster processing:
 python main.py --input video.mp4 --output subtitles.srt --whisper-model medium --gpu
 ```
 
+Batch process multiple videos:
+
+```bash
+python examples/batch_processing.py --input-dir videos/ --output-dir subtitles/ --format srt --whisper-model tiny
+```
+
 For more options and examples, see the [Usage Documentation](docs/usage.md).
 
 ## Project Structure
@@ -78,7 +87,11 @@ For more options and examples, see the [Usage Documentation](docs/usage.md).
 SubWhisper/
 ├── docs/
 │   ├── usage.md                 # Detailed usage documentation
+│   ├── api.md                   # API documentation
 │   └── development.md           # Development guidelines
+├── examples/
+│   ├── batch_processing.py      # Example of processing multiple videos
+│   └── programmatic_usage.py    # Example of using SubWhisper as a library
 ├── models/                      # Pre-trained models directory
 ├── src/
 │   ├── audio/                   # Audio processing modules
@@ -100,6 +113,26 @@ SubWhisper/
 4. **Speech Recognition**: Transcribes speech to text
 5. **Subtitle Generation**: Creates properly timed subtitle entries
 6. **Format Conversion**: Outputs subtitles in the requested format
+
+## Testing
+
+Run the test suite to ensure everything is working correctly:
+
+```bash
+pytest
+```
+
+For more detailed output:
+
+```bash
+pytest -v
+```
+
+To run a specific test:
+
+```bash
+pytest tests/test_subtitles.py -v
+```
 
 ## Contributing
 

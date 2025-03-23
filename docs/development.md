@@ -67,6 +67,85 @@ We use the following tools to maintain code quality:
   mypy src tests
   ```
 
+## Testing
+
+We use pytest for testing the SubWhisper project. All new features and bug fixes should include appropriate tests.
+
+### Running Tests
+
+To run the full test suite:
+
+```bash
+pytest
+```
+
+To run tests with detailed output:
+
+```bash
+pytest -v
+```
+
+To run a specific test file:
+
+```bash
+pytest tests/test_audio.py
+```
+
+To run a specific test class or method:
+
+```bash
+pytest tests/test_audio.py::TestAudioProcessor
+pytest tests/test_audio.py::TestAudioProcessor::test_normalize_audio
+```
+
+### Writing Tests
+
+When writing tests:
+
+1. Place test files in the `tests/` directory
+2. Name test files with the prefix `test_`
+3. Name test classes with the prefix `Test`
+4. Name test methods with the prefix `test_`
+5. Use appropriate assertions to verify expected behavior
+6. Use mocks for external dependencies
+
+Example:
+
+```python
+import unittest
+from unittest.mock import patch, MagicMock
+
+class TestAudioProcessor(unittest.TestCase):
+    def setUp(self):
+        # Setup code
+        pass
+        
+    def test_normalize_audio(self):
+        # Test code
+        result = self.processor.normalize_audio(input_data)
+        self.assertEqual(result, expected_output)
+```
+
+### Test Fixtures
+
+We use pytest fixtures in `tests/conftest.py` for common test setup. Some useful fixtures include:
+
+1. `mock_input` - Mocks user input to always return 'y'
+2. `test_env` - Sets up environment variables for testing
+3. `mock_whisper_model` - Mocks the Whisper model for testing
+4. `temp_dir` - Creates a temporary directory for test files
+
+### Non-interactive Testing
+
+For testing methods that may require user input, we've added the `no_prompt` parameter to bypass interactive prompts. When writing tests for such methods, always use this parameter:
+
+```python
+# Example for testing SpeechRecognizer
+def test_transcribe(self):
+    transcription = self.recognizer.transcribe("test_audio.wav", no_prompt=True)
+    self.assertIsNotNone(transcription)
+```
+
 ## Adding New Features
 
 When adding new features:
@@ -189,6 +268,14 @@ For processing large videos:
 1. Use a smaller model with the `--model tiny` option
 2. Process videos in segments
 3. Increase system swap space if possible
+
+### Python package conflicts
+
+If you encounter package conflicts:
+
+1. Make sure you're using the correct OpenAI Whisper package (`openai-whisper`)
+2. Check for conflicts with other packages named "whisper"
+3. Create a fresh virtual environment if needed
 
 ## Performance Optimization
 

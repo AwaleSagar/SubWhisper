@@ -89,9 +89,21 @@ from src.audio.speech import SpeechRecognizer
 # Initialize speech recognizer
 speech_recognizer = SpeechRecognizer(config)
 
-# Transcribe audio
+# Transcribe audio (with automatic prompting for model download if needed)
 transcription = speech_recognizer.transcribe("path/to/audio.wav", "en")
-# Returns: Transcription object with segments
+
+# Or transcribe with no prompts (useful for automated scripts)
+transcription = speech_recognizer.transcribe("path/to/audio.wav", "en", no_prompt=True)
+
+# Explicitly load the model first with no prompts
+speech_recognizer.load_model(no_prompt=True)
+
+# Transcribe segments of audio
+segments = [
+    {"path": "segment1.wav", "start": 0.0, "end": 10.0},
+    {"path": "segment2.wav", "start": 10.0, "end": 20.0}
+]
+results = speech_recognizer.transcribe_segments(segments, language="en", no_prompt=True)
 ```
 
 ## Language Detection
@@ -148,9 +160,15 @@ exists = check_model_exists("whisper", "base")
 success, message = download_model("whisper", "base")
 # Returns: (True, "Model downloaded successfully") or (False, "Error message")
 
+# Download model without prompting for confirmation (for automated scripts)
+success, message = download_model("whisper", "base", no_prompt=True)
+
 # Load model
 success, model, message = load_model("whisper", "base")
 # Returns: (True, model_object, "Model loaded successfully") or (False, None, "Error message")
+
+# Load model without prompting for confirmation
+success, model, message = load_model("whisper", "base", auto_download=True, no_prompt=True)
 ```
 
 ## Complete Example
