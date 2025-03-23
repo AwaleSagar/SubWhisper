@@ -52,3 +52,6 @@ models/language/
 # Temporary audio files
 *.temp.wav
 *.temp.mp3
+
+# Project analysis
+project_shortcomings.txt
