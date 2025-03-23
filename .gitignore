@@ -6,9 +6,6 @@ __pycache__/
 # C extensions
 *.so
 
-# Cursor Rules
-.cursor/
-cursor/
 
 # Distribution / packaging
 dist/
@@ -24,6 +21,7 @@ tts/
 # Development environments
 .idea/
 .vscode/
+.cursor/
 *.sublime-*
 
 # Testing
