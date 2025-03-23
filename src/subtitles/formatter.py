@@ -109,16 +109,19 @@ class SubtitleFormatter:
         
         return "\n".join(lines)
     
-    def _format_srt_timestamp(self, seconds: float) -> str:
+    def _format_srt_timestamp(self, seconds: Union[float, datetime.timedelta]) -> str:
         """
         Format timestamp for SRT format (HH:MM:SS,mmm).
         
         Args:
-            seconds: Time in seconds
+            seconds: Time in seconds or timedelta object
             
         Returns:
             Formatted timestamp
         """
+        if isinstance(seconds, datetime.timedelta):
+            seconds = seconds.total_seconds()
+        
         hours = int(seconds / 3600)
         minutes = int((seconds % 3600) / 60)
         seconds = seconds % 60
@@ -155,16 +158,19 @@ class SubtitleFormatter:
         
         return "\n".join(lines)
     
-    def _format_vtt_timestamp(self, seconds: float) -> str:
+    def _format_vtt_timestamp(self, seconds: Union[float, datetime.timedelta]) -> str:
         """
         Format timestamp for WebVTT format (HH:MM:SS.mmm).
         
         Args:
-            seconds: Time in seconds
+            seconds: Time in seconds or timedelta object
             
         Returns:
             Formatted timestamp
         """
+        if isinstance(seconds, datetime.timedelta):
+            seconds = seconds.total_seconds()
+        
         hours = int(seconds / 3600)
         minutes = int((seconds % 3600) / 60)
         seconds = seconds % 60
@@ -212,16 +218,19 @@ class SubtitleFormatter:
         
         return "\n".join(lines)
     
-    def _format_ass_timestamp(self, seconds: float) -> str:
+    def _format_ass_timestamp(self, seconds: Union[float, datetime.timedelta]) -> str:
         """
         Format timestamp for ASS format (H:MM:SS.cc).
         
         Args:
-            seconds: Time in seconds
+            seconds: Time in seconds or timedelta object
             
         Returns:
             Formatted timestamp
         """
+        if isinstance(seconds, datetime.timedelta):
+            seconds = seconds.total_seconds()
+        
         hours = int(seconds / 3600)
         minutes = int((seconds % 3600) / 60)
         seconds = seconds % 60

@@ -99,6 +99,7 @@ class TestSpeechRecognizer(unittest.TestCase):
         # Create a mock config
         args = MagicMock()
         args.model = "base"
+        args.whisper_model = "tiny"  # Add this to match MockArgs in other tests
         args.gpu = False
         args.language = None
         args.verbose = False
@@ -121,78 +122,86 @@ class TestSpeechRecognizer(unittest.TestCase):
 
     def test_load_model(self):
         """Test loading the speech recognition model."""
-        # Load the model
-        model = self.speech_recognizer.load_model()
+        # Load the model with no_prompt=True to avoid user interaction during tests
+        model = self.speech_recognizer.load_model(model_name="base", no_prompt=True)
         
         # Verify that whisper.load_model was called with the correct parameters
-        self.mock_whisper.load_model.assert_called_once_with("base", device="cpu")
+        self.mock_whisper.load_model.assert_called_once_with("base", device="cpu", download_root=self.config.get_model_path("whisper"))
         
-        # Verify that the returned model is the mock model
-        self.assertEqual(model, self.mock_model)
+        # Verify that the returned value is True
+        self.assertTrue(model)
+        
+        # Verify that the model is set correctly
+        self.assertEqual(self.speech_recognizer.model, self.mock_model)
 
     def test_transcribe(self):
         """Test transcribing audio."""
-        # Mock audio data
-        audio_data = np.zeros(16000, dtype=np.float32)  # 1 second of silence
+        audio_path = "test_audio.wav"
         
         # Mock transcription result
         mock_result = {
             "text": "This is a test transcription.",
             "segments": [
                 {
+                    "id": 0,
                     "start": 0.0,
                     "end": 1.0,
-                    "text": "This is a test transcription."
+                    "text": "This is a test transcription.",
+                    "confidence": 0.95
                 }
             ],
             "language": "en"
         }
         self.mock_model.transcribe.return_value = mock_result
         
-        # Test transcribing audio
-        result = self.speech_recognizer.transcribe(audio_data)
+        # Test transcribing audio with no_prompt=True to avoid user interaction
+        result = self.speech_recognizer.transcribe(audio_path, no_prompt=True)
         
         # Verify that the model's transcribe method was called
         self.mock_model.transcribe.assert_called_once()
         
-        # Verify that the result matches the mock result
-        self.assertEqual(result, mock_result)
+        # Verify that the result is a Transcription object with expected segments
+        self.assertEqual(len(result.segments), 1)
+        self.assertEqual(result.segments[0]["text"], "This is a test transcription.")
 
     def test_transcribe_with_language(self):
         """Test transcribing audio with a specified language."""
-        # Update the config to specify a language
-        self.config.args.language = "es"
+        # Update the language directly on the Config object instead of using args
+        self.config.language = "es"
         
         # Create a new speech recognizer with the updated config
         speech_recognizer = SpeechRecognizer(self.config)
         
-        # Mock audio data
-        audio_data = np.zeros(16000, dtype=np.float32)  # 1 second of silence
+        # Test audio path
+        audio_path = "test_audio.wav"
         
         # Mock transcription result
         mock_result = {
             "text": "Esta es una prueba de transcripción.",
             "segments": [
                 {
+                    "id": 0,
                     "start": 0.0,
                     "end": 1.0,
-                    "text": "Esta es una prueba de transcripción."
+                    "text": "Esta es una prueba de transcripción.",
+                    "confidence": 0.95
                 }
             ],
             "language": "es"
         }
         self.mock_model.transcribe.return_value = mock_result
         
-        # Test transcribing audio with language specified
-        result = speech_recognizer.transcribe(audio_data)
+        # Test transcribing audio with language specified and no_prompt=True
+        result = speech_recognizer.transcribe(audio_path, language="es", no_prompt=True)
         
         # Verify that the model's transcribe method was called with the language parameter
         self.mock_model.transcribe.assert_called_once()
         call_args = self.mock_model.transcribe.call_args[1]
         self.assertEqual(call_args.get("language"), "es")
         
-        # Verify that the result matches the mock result
-        self.assertEqual(result, mock_result)
+        # Verify that the result is a Transcription object with expected segments
+        self.assertEqual(len(result.segments), 1)
+        self.assertEqual(result.segments[0]["text"], "Esta es una prueba de transcripción.")
 
 
 if __name__ == '__main__':

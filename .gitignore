@@ -17,6 +17,10 @@ venv/
 env/
 ENV/
 tts/
+subwhisper_env/
+
+# Sample files
+samples/
 
 # Development environments
 .idea/

@@ -85,6 +85,10 @@ class AudioExtractor:
             error_message = f"Audio extraction failed: {e.stderr}"
             logger.error(error_message)
             raise AudioExtractionError(error_message)
+        except Exception as e:
+            error_message = f"Audio extraction failed: {str(e)}"
+            logger.error(error_message)
+            raise AudioExtractionError(error_message)
     
     def extract_segment(self, video_path: str, start_time: float, 
                         duration: Optional[float] = None, 
@@ -159,5 +163,9 @@ class AudioExtractor:
             
         except subprocess.CalledProcessError as e:
             error_message = f"Audio segment extraction failed: {e.stderr}"
+            logger.error(error_message)
+            raise AudioExtractionError(error_message)
+        except Exception as e:
+            error_message = f"Audio segment extraction failed: {str(e)}"
             logger.error(error_message)
             raise AudioExtractionError(error_message) 

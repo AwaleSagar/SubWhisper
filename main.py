@@ -8,6 +8,8 @@ import os
 import sys
 import argparse
 from pathlib import Path
+import logging
+from typing import Optional, Dict, Any, List
 
 # Add src directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
@@ -15,13 +17,101 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src"
 # Import project modules
 from src.utils.config import Config
 from src.utils.logger import setup_logger
-from src.video.input import VideoInput
-from src.video.extraction import AudioExtractor
+from src.video.input import VideoInput, VideoInputError
+from src.video.extraction import AudioExtractor, AudioExtractionError
 from src.audio.processing import AudioProcessor
 from src.audio.speech import SpeechRecognizer
 from src.language.detection import LanguageDetector
 from src.subtitles.generator import SubtitleGenerator
 from src.subtitles.formatter import SubtitleFormatter
+from src.utils.model_manager import check_model_exists, load_model
+
+# Define supported subtitle formats
+SUPPORTED_SUBTITLE_FORMATS = ["srt", "vtt", "ass"]
+
+# Define supported Whisper models
+SUPPORTED_WHISPER_MODELS = ["tiny", "base", "small", "medium", "large"]
+
+# Define supported language codes (ISO 639-1)
+SUPPORTED_LANGUAGE_CODES = [
+    "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko", "ar", "hi", 
+    "tr", "pl", "sv", "da", "no", "fi", "hu", "cs", "el", "bg", "ro", "sk", "uk", 
+    "hr", "sr", "sl", "et", "lt", "lv", "he", "th", "vi", "id", "ms", "fa", "ur"
+]
+
+def validate_file_path(file_path: str, must_exist: bool = True) -> Optional[str]:
+    """
+    Validate a file path.
+    
+    Args:
+        file_path: The file path to validate
+        must_exist: If True, the file must exist
+        
+    Returns:
+        Error message if validation fails, None otherwise
+    """
+    if not file_path:
+        return "File path cannot be empty"
+    
+    path = Path(file_path)
+    
+    if must_exist and not path.exists():
+        return f"File does not exist: {file_path}"
+    
+    if must_exist and not path.is_file():
+        return f"Path is not a file: {file_path}"
+    
+    return None
+
+def validate_output_file(file_path: str, format: str) -> Optional[str]:
+    """
+    Validate an output file path.
+    
+    Args:
+        file_path: The file path to validate
+        format: The expected file format
+        
+    Returns:
+        Error message if validation fails, None otherwise
+    """
+    if not file_path:
+        return "Output file path cannot be empty"
+    
+    path = Path(file_path)
+    
+    # Check if parent directory exists
+    if not path.parent.exists():
+        return f"Output directory does not exist: {path.parent}"
+    
+    # Check if file extension matches the format
+    if path.suffix.lower() != f".{format}":
+        return f"Output file extension does not match the specified format (expected .{format}): {file_path}"
+    
+    return None
+
+def validate_directory(dir_path: str, must_exist: bool = False) -> Optional[str]:
+    """
+    Validate a directory path.
+    
+    Args:
+        dir_path: The directory path to validate
+        must_exist: If True, the directory must exist
+        
+    Returns:
+        Error message if validation fails, None otherwise
+    """
+    if not dir_path:
+        return "Directory path cannot be empty"
+    
+    path = Path(dir_path)
+    
+    if must_exist and not path.exists():
+        return f"Directory does not exist: {dir_path}"
+    
+    if must_exist and not path.is_dir():
+        return f"Path is not a directory: {dir_path}"
+    
+    return None
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -43,21 +133,21 @@ def parse_arguments():
     
     parser.add_argument(
         "--format", "-f", 
-        choices=["srt", "vtt", "ass"],
+        choices=SUPPORTED_SUBTITLE_FORMATS,
         default="srt",
-        help="Subtitle format (default: srt)"
+        help=f"Subtitle format (choices: {', '.join(SUPPORTED_SUBTITLE_FORMATS)}, default: srt)"
     )
     
     parser.add_argument(
         "--language", "-l", 
-        help="Force specific language (ISO 639-1 code, e.g., 'en' for English)"
+        help=f"Force specific language (ISO 639-1 code, e.g., 'en' for English). Supported codes: {', '.join(SUPPORTED_LANGUAGE_CODES[:10])} and more."
     )
     
     parser.add_argument(
         "--whisper-model", "-m",
-        choices=["tiny", "base", "small", "medium", "large"],
+        choices=SUPPORTED_WHISPER_MODELS,
         default="base",
-        help="Whisper model size for speech recognition (default: base). Larger models are more accurate but slower and require more memory."
+        help=f"Whisper model size for speech recognition (choices: {', '.join(SUPPORTED_WHISPER_MODELS)}, default: base). Larger models are more accurate but slower and require more memory."
     )
     
     parser.add_argument(
@@ -79,6 +169,44 @@ def parse_arguments():
     
     return parser.parse_args()
 
+def validate_arguments(args) -> List[str]:
+    """
+    Validate command line arguments.
+    
+    Args:
+        args: Parsed command line arguments
+        
+    Returns:
+        List of error messages (empty if validation succeeds)
+    """
+    errors = []
+    
+    # Validate input file
+    error = validate_file_path(args.input, must_exist=True)
+    if error:
+        errors.append(f"Input error: {error}")
+    
+    # Validate output file and format
+    error = validate_output_file(args.output, args.format)
+    if error:
+        errors.append(f"Output error: {error}")
+    
+    # Validate language code if specified
+    if args.language and args.language not in SUPPORTED_LANGUAGE_CODES:
+        errors.append(f"Unsupported language code: {args.language}. Supported codes: {', '.join(SUPPORTED_LANGUAGE_CODES[:10])}...")
+    
+    # Validate temp directory if specified
+    if args.temp_dir:
+        error = validate_directory(args.temp_dir, must_exist=True)
+        if error:
+            errors.append(f"Temporary directory error: {error}")
+    
+    # Validate Whisper model availability
+    if not check_model_exists("whisper", args.whisper_model):
+        errors.append(f"Whisper model '{args.whisper_model}' is not installed. Run the program to be prompted for download.")
+    
+    return errors
+
 def main():
     """Main application function."""
     # Parse arguments
@@ -88,21 +216,37 @@ def main():
     logger = setup_logger(verbose=args.verbose)
     logger.info("Starting SubWhisper")
     
+    # Validate arguments
+    validation_errors = validate_arguments(args)
+    if validation_errors:
+        for error in validation_errors:
+            logger.error(error)
+        print("\nPlease fix the errors and try again.")
+        return 1
+    
     # Initialize configuration
     config = Config(args)
     
     try:
         # Validate input video
         logger.info(f"Processing input video: {args.input}")
-        video_input = VideoInput(args.input)
-        video_info = video_input.get_info()
-        logger.info(f"Video info: {video_info}")
+        try:
+            video_input = VideoInput(args.input)
+            video_info = video_input.get_info()
+            logger.info(f"Video info: {video_info}")
+        except VideoInputError as e:
+            logger.error(f"Video input error: {str(e)}")
+            return 1
         
         # Extract audio
         logger.info("Extracting audio from video")
-        audio_extractor = AudioExtractor(config)
-        audio_path = audio_extractor.extract(args.input)
-        logger.info(f"Audio extracted to: {audio_path}")
+        try:
+            audio_extractor = AudioExtractor(config)
+            audio_path = audio_extractor.extract(args.input)
+            logger.info(f"Audio extracted to: {audio_path}")
+        except AudioExtractionError as e:
+            logger.error(f"Audio extraction error: {str(e)}")
+            return 1
         
         # Process audio
         logger.info("Processing audio")
@@ -141,6 +285,8 @@ def main():
         
     except Exception as e:
         logger.error(f"Error: {str(e)}")
+        import traceback
+        logger.debug(traceback.format_exc())
         return 1
     
     return 0

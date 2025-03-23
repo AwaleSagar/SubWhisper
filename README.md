@@ -24,8 +24,8 @@ A standalone tool for audio extraction and automatic subtitle generation from vi
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/ai_video_tts.git
-   cd ai_video_tts
+   git clone https://github.com/AwaleSagar/SubWhisper.git
+   cd SubWhisper
    ```
 
 2. Set up a virtual environment:
@@ -75,7 +75,7 @@ For more options and examples, see the [Usage Documentation](docs/usage.md).
 ## Project Structure
 
 ```
-ai_video_tts/
+SubWhisper/
 ├── docs/
 │   ├── usage.md                 # Detailed usage documentation
 │   └── development.md           # Development guidelines

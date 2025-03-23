@@ -23,6 +23,7 @@ class MockArgs:
         self.format = "srt"
         self.language = None
         self.model = "tiny"
+        self.whisper_model = "tiny"
         self.gpu = False
         self.verbose = False
         self.temp_dir = None

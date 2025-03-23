@@ -17,6 +17,124 @@ class AudioProcessingError(Exception):
     """Exception raised for errors in audio processing."""
     pass
 
+class AudioSegment:
+    """Class for handling audio segments."""
+    
+    def __init__(self, path: str = None, data: np.ndarray = None, sample_rate: int = 16000, channels: int = 1):
+        """Initialize audio segment."""
+        self.path = path
+        self.data = data
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self._duration = None
+        self.dBFS = self._calculate_dBFS() if data is not None else None
+    
+    @property
+    def duration(self) -> float:
+        """Get duration of audio segment in seconds."""
+        if self._duration is None and self.data is not None:
+            self._duration = len(self.data) / self.sample_rate
+        return self._duration
+    
+    @property
+    def frame_rate(self) -> int:
+        """Get sample rate of audio segment."""
+        return self.sample_rate
+    
+    def _calculate_dBFS(self) -> float:
+        """Calculate dBFS (decibels relative to full scale)."""
+        if self.data is None or len(self.data) == 0:
+            return -np.inf
+        
+        # Calculate RMS
+        rms = np.sqrt(np.mean(np.square(self.data)))
+        
+        # Convert to dBFS (assuming full scale is 1.0)
+        if rms <= 0:
+            return -np.inf
+        return 20 * np.log10(rms)
+    
+    @classmethod
+    def from_file(cls, file_path: str) -> 'AudioSegment':
+        """Load audio from file."""
+        try:
+            data, sample_rate = librosa.load(file_path, sr=None, mono=False)
+            
+            # If stereo, convert data shape to (samples, channels)
+            if len(data.shape) > 1 and data.shape[0] == 2:
+                data = data.T
+                channels = 2
+            else:
+                # If mono, ensure data is the right shape
+                data = np.atleast_2d(data).T if len(data.shape) == 1 else data
+                channels = 1
+            
+            segment = cls(path=file_path, data=data, sample_rate=sample_rate, channels=channels)
+            return segment
+        except Exception as e:
+            logger.error(f"Error loading audio file {file_path}: {str(e)}")
+            raise AudioProcessingError(f"Failed to load audio file: {str(e)}")
+    
+    def set_channels(self, channels: int) -> 'AudioSegment':
+        """Set number of channels in the audio segment."""
+        if self.channels == channels:
+            return self
+        
+        if channels == 1 and self.channels == 2:
+            # Convert stereo to mono
+            mono_data = np.mean(self.data, axis=1, keepdims=True)
+            result = AudioSegment(path=self.path, data=mono_data, sample_rate=self.sample_rate, channels=1)
+            return result
+        elif channels == 2 and self.channels == 1:
+            # Convert mono to stereo (duplicate channel)
+            stereo_data = np.tile(self.data, (1, 2))
+            result = AudioSegment(path=self.path, data=stereo_data, sample_rate=self.sample_rate, channels=2)
+            return result
+        else:
+            raise AudioProcessingError(f"Unsupported channel conversion: {self.channels} to {channels}")
+    
+    def apply_gain(self, gain_db: float) -> 'AudioSegment':
+        """Apply gain to audio segment."""
+        if self.data is None:
+            return self
+        
+        # Convert dB gain to amplitude multiplier
+        gain_factor = 10 ** (gain_db / 20)
+        
+        # Apply gain
+        gained_data = self.data * gain_factor
+        
+        # Create new segment with gained data
+        result = AudioSegment(
+            path=self.path, 
+            data=gained_data, 
+            sample_rate=self.sample_rate, 
+            channels=self.channels
+        )
+        
+        return result
+    
+    def save(self, output_path: str) -> str:
+        """Save audio to file."""
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            
+            # Save audio data
+            if self.channels == 2:
+                # For stereo, transpose data to (channels, samples)
+                data_to_save = self.data.T
+            else:
+                # For mono, flatten if needed
+                data_to_save = self.data.flatten() if self.data.shape[1] == 1 else self.data
+            
+            sf.write(output_path, data_to_save, self.sample_rate)
+            return output_path
+        except Exception as e:
+            logger.error(f"Error saving audio file {output_path}: {str(e)}")
+            raise AudioProcessingError(f"Failed to save audio file: {str(e)}")
+
+
 class AudioProcessor:
     """Audio processing class for preprocessing audio before speech recognition."""
     
@@ -28,6 +146,44 @@ class AudioProcessor:
             config: Application configuration
         """
         self.config = config
+    
+    def load_audio(self, audio_path: str) -> AudioSegment:
+        """
+        Load audio from file.
+        
+        Args:
+            audio_path: Path to the audio file
+            
+        Returns:
+            AudioSegment object
+        """
+        return AudioSegment.from_file(audio_path)
+    
+    def convert_to_mono(self, audio_segment: AudioSegment) -> AudioSegment:
+        """
+        Convert audio segment to mono.
+        
+        Args:
+            audio_segment: Audio segment to convert
+            
+        Returns:
+            Mono audio segment
+        """
+        return audio_segment.set_channels(1)
+    
+    def normalize_audio(self, audio_segment: AudioSegment) -> AudioSegment:
+        """
+        Normalize audio volume to target dBFS.
+        
+        Args:
+            audio_segment: Audio segment to normalize
+            
+        Returns:
+            Normalized audio segment
+        """
+        target_dBFS = -3
+        gain = target_dBFS - audio_segment.dBFS
+        return audio_segment.apply_gain(gain)
     
     def process(self, audio_path: str, output_path: Optional[str] = None) -> str:
         """

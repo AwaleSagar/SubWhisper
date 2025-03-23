@@ -1,12 +1,15 @@
 """
-Configuration handling for SubWhisper.
+Configuration module for SubWhisper.
 """
 
 import os
+import logging
 import tempfile
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union, List
+
+logger = logging.getLogger("subwhisper")
 
 class Config:
     """Configuration class for SubWhisper."""
@@ -18,17 +21,36 @@ class Config:
         Args:
             args: Command line arguments
         """
+        # Save the original args for tests
+        self.args = args
+        
         self.input_file = args.input
         self.output_file = args.output
         self.subtitle_format = args.format
         self.language = args.language
-        self.model_size = args.whisper_model
-        self.use_gpu = args.gpu and self._is_gpu_available()
-        self.verbose = args.verbose
-        self.temp_dir = args.temp_dir or tempfile.gettempdir()
         
-        # Ensure temp directory exists
-        os.makedirs(self.temp_dir, exist_ok=True)
+        # Handle whisper_model attribute if it exists
+        self.model_size = getattr(args, 'whisper_model', 'base')
+        
+        # Set GPU usage
+        self.use_gpu = getattr(args, 'gpu', False)
+        
+        # Set verbose mode
+        self.verbose = getattr(args, 'verbose', False)
+        
+        # Set temporary directory
+        self.temp_dir = getattr(args, 'temp_dir', None) or tempfile.mkdtemp(prefix="subwhisper_")
+        
+        # Audio processing options
+        self.audio_format = "wav"
+        self.audio_sample_rate = 16000
+        
+        # Load additional configuration from environment variables
+        self._load_env_config()
+        
+        # Print configuration summary if verbose
+        if self.verbose:
+            self._print_config()
         
         # Model paths
         self.models_dir = os.path.abspath(os.path.join(
@@ -40,13 +62,21 @@ class Config:
         # Additional config
         self._load_default_config()
     
-    def _is_gpu_available(self) -> bool:
-        """Check if GPU is available for acceleration."""
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            return False
+    def _load_env_config(self):
+        """Load configuration from environment variables."""
+        # To be implemented
+        pass
+    
+    def _print_config(self):
+        """Print configuration summary."""
+        logger.info("Configuration:")
+        logger.info(f"  Input: {self.input_file}")
+        logger.info(f"  Output: {self.output_file}")
+        logger.info(f"  Format: {self.subtitle_format}")
+        logger.info(f"  Language: {self.language or 'auto'}")
+        logger.info(f"  Model: {self.model_size}")
+        logger.info(f"  GPU: {self.use_gpu}")
+        logger.info(f"  Temp directory: {self.temp_dir}")
     
     def _load_default_config(self):
         """Load default configuration values."""

@@ -71,28 +71,38 @@ class SpeechRecognizer:
             logger.debug(f"Error checking for local model: {str(e)}")
             return False
     
-    def _load_model(self) -> None:
+    def _load_model(self, model_name: str = None, no_prompt: bool = False) -> bool:
         """
         Load the Whisper model based on configuration.
         
+        Args:
+            model_name: Optional model name to override config
+            no_prompt: If True, skip the user confirmation prompt
+            
+        Returns:
+            True if model was loaded successfully, False otherwise
+            
         Raises:
-            SpeechRecognitionError: If model loading fails
+            SpeechRecognitionError: If model loading fails and not in no_prompt mode
         """
         try:
-            model_size = self.config.model_size
+            model_size = model_name if model_name else self.config.model_size
             
             # Check if the model exists locally
             if not self._model_exists_locally(model_size):
                 logger.info(f"Whisper model '{model_size}' not found locally")
                 
-                # Prompt the user for download confirmation
-                download_prompt = f"Whisper model '{model_size}' is not installed. Do you want to download it now? (y/n): "
-                user_response = input(download_prompt).strip().lower()
-                
-                if user_response != 'y' and user_response != 'yes':
-                    error_message = f"Model download cancelled. Please choose a different model size or download manually."
-                    logger.error(error_message)
-                    raise SpeechRecognitionError(error_message)
+                # Prompt the user for download confirmation if not in no_prompt mode
+                if not no_prompt:
+                    download_prompt = f"Whisper model '{model_size}' is not installed. Do you want to download it now? (y/n): "
+                    user_response = input(download_prompt).strip().lower()
+                    
+                    if user_response != 'y' and user_response != 'yes':
+                        error_message = f"Model download cancelled. Please choose a different model size or download manually."
+                        logger.error(error_message)
+                        if no_prompt:
+                            return False
+                        raise SpeechRecognitionError(error_message)
                 
                 logger.info(f"Downloading Whisper model: {model_size}")
             else:
@@ -109,19 +119,37 @@ class SpeechRecognizer:
             )
             
             logger.info(f"Whisper model {model_size} loaded successfully")
+            return True
         
         except Exception as e:
             error_message = f"Failed to load Whisper model: {str(e)}"
             logger.error(error_message)
+            if no_prompt:
+                return False
             raise SpeechRecognitionError(error_message)
     
-    def transcribe(self, audio_path: str, language: Optional[str] = None) -> Transcription:
+    # Public method for compatibility with tests
+    def load_model(self, model_name: str = None, no_prompt: bool = False) -> bool:
+        """
+        Public wrapper for _load_model.
+        
+        Args:
+            model_name: Optional model name to override config
+            no_prompt: If True, skip the user confirmation prompt
+            
+        Returns:
+            True if model was loaded successfully, False otherwise
+        """
+        return self._load_model(model_name, no_prompt)
+    
+    def transcribe(self, audio_path: str, language: Optional[str] = None, no_prompt: bool = False) -> Transcription:
         """
         Transcribe audio file to text with timestamps.
         
         Args:
             audio_path: Path to the audio file
             language: Language code (if known)
+            no_prompt: If True, skip the user confirmation prompt when loading model
             
         Returns:
             Transcription object with segments
@@ -132,7 +160,10 @@ class SpeechRecognizer:
         try:
             # Load model if not loaded
             if self.model is None:
-                self._load_model()
+                if not self._load_model(no_prompt=no_prompt):
+                    error_message = "Failed to load model for transcription"
+                    logger.error(error_message)
+                    raise SpeechRecognitionError(error_message)
             
             # Set transcription options
             options = {
@@ -173,13 +204,14 @@ class SpeechRecognizer:
             logger.error(error_message)
             raise SpeechRecognitionError(error_message)
     
-    def transcribe_segments(self, segment_paths: List[str], language: Optional[str] = None) -> Transcription:
+    def transcribe_segments(self, segment_paths: List[str], language: Optional[str] = None, no_prompt: bool = False) -> Transcription:
         """
         Transcribe multiple audio segments and combine the results.
         
         Args:
             segment_paths: List of paths to audio segment files
             language: Language code (if known)
+            no_prompt: If True, skip the user confirmation prompt when loading model
             
         Returns:
             Combined Transcription object with all segments
@@ -190,7 +222,10 @@ class SpeechRecognizer:
         try:
             # Load model if not loaded
             if self.model is None:
-                self._load_model()
+                if not self._load_model(no_prompt=no_prompt):
+                    error_message = "Failed to load model for transcription"
+                    logger.error(error_message)
+                    raise SpeechRecognitionError(error_message)
             
             # Process each segment
             all_segments = []
@@ -209,7 +244,7 @@ class SpeechRecognizer:
                     segment_start_time = 0.0
                 
                 # Transcribe segment
-                segment_transcription = self.transcribe(segment_path, language)
+                segment_transcription = self.transcribe(segment_path, language, no_prompt=no_prompt)
                 
                 # Adjust timestamps and append segments
                 for segment in segment_transcription.segments:

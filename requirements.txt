@@ -15,6 +15,7 @@ torchaudio>=0.10.0
 transformers>=4.12.0
 whisper>=1.0.0
 langid>=1.1.6
+fasttext>=0.9.2
 
 # Subtitle processing
 pysrt>=1.1.2
@@ -25,6 +26,7 @@ tqdm>=4.62.0
 click>=8.0.0
 loguru>=0.5.3
 python-dotenv>=0.19.0
+requests>=2.27.0
 
 # Testing
 pytest>=6.2.5

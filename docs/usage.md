@@ -8,7 +8,7 @@ Before using the tool, you need to install the required dependencies:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/subwhisper.git
+git clone https://github.com/AwaleSagar/SubWhisper
 cd subwhisper
 
 # Create and activate virtual environment

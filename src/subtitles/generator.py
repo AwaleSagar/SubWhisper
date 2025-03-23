@@ -5,6 +5,7 @@ Subtitle generation module for SubWhisper.
 import os
 import logging
 import re
+import datetime
 from typing import Dict, Any, List, Optional, Union, NamedTuple
 import html
 from dataclasses import dataclass
@@ -14,34 +15,20 @@ from src.audio.speech import Transcription
 
 logger = logging.getLogger("subwhisper")
 
+@dataclass
+class Subtitle:
+    """Subtitle entry with text and timing information."""
+    index: int
+    start: datetime.timedelta
+    end: datetime.timedelta
+    text: str
+
 class SubtitleGenerationError(Exception):
     """Exception raised for errors in subtitle generation."""
     pass
 
-class Subtitle:
-    """Class representing a subtitle with timing information."""
-    
-    def __init__(self, index: int, start: float, end: float, text: str):
-        """
-        Initialize subtitle.
-        
-        Args:
-            index: Subtitle index
-            start: Start time in seconds
-            end: End time in seconds
-            text: Subtitle text
-        """
-        self.index = index
-        self.start = start
-        self.end = end
-        self.text = text
-    
-    def __repr__(self) -> str:
-        """String representation of the subtitle."""
-        return f"Subtitle({self.index}, {self.start:.2f} -> {self.end:.2f}, '{self.text}')"
-
 class SubtitleGenerator:
-    """Subtitle generation class."""
+    """Subtitle generation class for creating subtitles from transcripts."""
     
     def __init__(self, config: Config):
         """
@@ -52,12 +39,12 @@ class SubtitleGenerator:
         """
         self.config = config
     
-    def generate(self, transcription: Transcription) -> List[Subtitle]:
+    def generate(self, transcript) -> List[Subtitle]:
         """
-        Generate subtitles from transcription.
+        Generate subtitles from transcript.
         
         Args:
-            transcription: Transcription object with segments
+            transcript: Transcript object with segments
             
         Returns:
             List of Subtitle objects
@@ -66,33 +53,26 @@ class SubtitleGenerator:
             SubtitleGenerationError: If subtitle generation fails
         """
         try:
-            logger.info("Generating subtitles from transcription")
+            subtitles = []
             
-            # Get subtitle settings
-            max_chars = self.config.subtitle_settings.get("max_chars_per_line", 42)
-            min_duration = self.config.subtitle_settings.get("min_duration", 0.5)
-            max_duration = self.config.subtitle_settings.get("max_duration", 7.0)
-            max_lines = self.config.subtitle_settings.get("line_count", 2)
+            # Process each segment in the transcript
+            for idx, segment in enumerate(transcript.segments):
+                # Convert start and end times from seconds to timedelta
+                start_time = datetime.timedelta(seconds=segment["start"])
+                end_time = datetime.timedelta(seconds=segment["end"])
+                
+                # Create subtitle
+                subtitle = Subtitle(
+                    index=idx + 1,
+                    start=start_time,
+                    end=end_time,
+                    text=segment["text"]
+                )
+                
+                subtitles.append(subtitle)
             
-            # Process transcription segments into subtitles
-            raw_subtitles = self._process_segments(
-                transcription.segments, 
-                max_chars=max_chars,
-                max_lines=max_lines
-            )
-            
-            # Adjust timing for better readability
-            adjusted_subtitles = self._adjust_timing(
-                raw_subtitles,
-                min_duration=min_duration,
-                max_duration=max_duration
-            )
-            
-            # Clean and format subtitle text
-            cleaned_subtitles = self._clean_subtitles(adjusted_subtitles)
-            
-            logger.info(f"Generated {len(cleaned_subtitles)} subtitles")
-            return cleaned_subtitles
+            logger.info(f"Generated {len(subtitles)} subtitles")
+            return subtitles
             
         except Exception as e:
             error_message = f"Subtitle generation failed: {str(e)}"
