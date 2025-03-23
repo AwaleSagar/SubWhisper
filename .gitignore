@@ -21,8 +21,8 @@ tts/
 # Development environments
 .idea/
 .vscode/
-.cursor/
 *.sublime-*
+.cursor/rules/
 
 # Testing
 .pytest_cache/
