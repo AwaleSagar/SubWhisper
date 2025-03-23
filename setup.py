@@ -6,12 +6,37 @@ Setup script for SubWhisper package.
 import os
 from setuptools import setup, find_packages
 
-# Read requirements from requirements.txt
-with open('requirements.txt') as f:
-    requirements = f.read().splitlines()
-
-# Filter out comments and empty lines
-requirements = [r for r in requirements if r and not r.startswith('#')]
+# Read requirements from requirements.txt if it exists
+requirements = []
+try:
+    with open('requirements.txt') as f:
+        requirements = f.read().splitlines()
+        # Filter out comments and empty lines
+        requirements = [r for r in requirements if r and not r.startswith('#')]
+except FileNotFoundError:
+    # Define requirements here as a fallback
+    requirements = [
+        "numpy>=1.20.0",
+        "scipy>=1.7.0",
+        "matplotlib>=3.4.0",
+        "ffmpeg-python>=0.2.0",
+        "pydub>=0.25.1",
+        "librosa>=0.8.1",
+        "moviepy>=1.0.3",
+        "torch>=1.10.0",
+        "torchaudio>=0.10.0",
+        "transformers>=4.12.0",
+        "whisper>=1.0.0",
+        "langid>=1.1.6",
+        "fasttext>=0.9.2",
+        "pysrt>=1.1.2",
+        "webvtt-py>=0.4.6",
+        "tqdm>=4.62.0",
+        "click>=8.0.0",
+        "loguru>=0.5.3",
+        "python-dotenv>=0.19.0",
+        "requests>=2.27.0",
+    ]
 
 # Read the README for the long description
 with open('README.md', 'r', encoding='utf-8') as f:
@@ -37,12 +62,10 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
     ],
     python_requires=">=3.8",
-    license="MIT",
 ) 
