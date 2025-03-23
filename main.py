@@ -201,10 +201,6 @@ def validate_arguments(args) -> List[str]:
         if error:
             errors.append(f"Temporary directory error: {error}")
     
-    # Validate Whisper model availability
-    if not check_model_exists("whisper", args.whisper_model):
-        errors.append(f"Whisper model '{args.whisper_model}' is not installed. Run the program to be prompted for download.")
-    
     return errors
 
 def main():
