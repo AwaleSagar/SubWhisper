@@ -31,7 +31,7 @@ class LanguageDetector:
         """
         self.config = config
         self.whisper_model = None
-        self.device = "cuda" if config.use_gpu and torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if config.gpu and torch.cuda.is_available() else "cpu"
         
         # Load model during initialization
         self._load_model()
