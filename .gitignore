@@ -55,3 +55,11 @@ models/language/
 
 # Project analysis
 project_shortcomings.txt
+
+# Subtitles
+*.srt
+*.ass
+*.ssa
+*.vtt
+*.sub
+*.srt
