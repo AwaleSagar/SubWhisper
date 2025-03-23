@@ -9,13 +9,20 @@ pydub==0.25.1
 librosa==0.10.0
 moviepy==1.0.3
 
+# Build dependencies
+pybind11>=2.6.0
+setuptools>=42.0.0
+wheel>=0.36.0
+
 # Machine Learning
 torch==2.0.1
 torchaudio==2.0.1
 transformers==4.30.0
 openai-whisper==20230314
 langid==1.1.6
-fasttext==0.9.2
+# Use fasttext with working compile setup
+fasttext>=0.9.2 ; platform_system != "Windows"  # Install fasttext on non-Windows
+gensim>=4.0.0 ; platform_system == "Windows"  # Use gensim's fasttext implementation on Windows
 
 # Subtitle processing
 pysrt==1.1.2

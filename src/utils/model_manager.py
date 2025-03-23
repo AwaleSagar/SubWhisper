@@ -8,7 +8,7 @@ import shutil
 import hashlib
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 import requests
 from tqdm import tqdm
 import logging
@@ -17,11 +17,21 @@ logger = logging.getLogger(__name__)
 
 # Check if optional dependencies are available
 FASTTEXT_AVAILABLE = False
+GENSIM_AVAILABLE = False
+
+# Import optional dependencies with proper type checking
 try:
     import fasttext
     FASTTEXT_AVAILABLE = True
 except ImportError:
-    logger.warning("FastText is not installed. Language detection features may be limited.")
+    logger.debug("Native FastText is not installed. Will try to use gensim implementation.")
+    try:
+        import gensim
+        import gensim.models  # Pre-import to avoid unresolved import error later
+        GENSIM_AVAILABLE = True
+        logger.info("Using gensim's FastText implementation for language detection.")
+    except ImportError:
+        logger.warning("Neither FastText nor gensim is installed. Language detection features may be limited.")
 
 # Model URLs and expected checksums
 MODEL_CONFIGS = {
@@ -248,33 +258,30 @@ def load_model(model_type: str, model_name: str, auto_download: bool = True, no_
         if not success:
             return False, None, message
     
-    # Load the model based on type
+    # Load the model
     model_path = get_model_path(model_type, model_name)
     
     try:
         if model_type == "whisper":
-            try:
-                import torch
-                import whisper
-            except ImportError:
-                return False, None, "Whisper dependencies not installed. Run 'pip install torch whisper'"
-            
-            logger.info(f"Loading Whisper model: {model_name}")
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            model = whisper.load_model(model_name, device=device, download_root=str(get_model_dir("whisper")))
-            return True, model, f"Whisper model loaded successfully: {model_name}"
-            
+            # Return None for whisper models - they will be loaded by the whisper library
+            return True, None, f"Whisper model path: {model_path}"
+        
         elif model_type == "language" and model_name == "fasttext":
-            if not FASTTEXT_AVAILABLE:
-                return False, None, "FastText is not installed. Run 'pip install fasttext>=0.9.2'"
-            
-            logger.info("Loading FastText language detection model")
-            model = fasttext.load_model(str(model_path))
-            return True, model, "FastText model loaded successfully"
-            
+            # Try to load with fasttext first, fallback to gensim
+            if FASTTEXT_AVAILABLE:
+                model = fasttext.load_model(str(model_path))
+                return True, model, f"FastText model loaded: {model_path}"
+            elif GENSIM_AVAILABLE:
+                # Gensim doesn't directly support Facebook's .bin format, so we'll return None
+                # The actual loading will be handled by the language detection module
+                logger.info(f"Using gensim instead of native fasttext for language detection")
+                return True, None, f"Using gensim for language detection"
+            else:
+                return False, None, "Neither FastText nor gensim is available"
+                
         else:
-            return False, None, f"Unsupported model type/name: {model_type}/{model_name}"
-            
+            return False, None, f"Unknown model type/name combination: {model_type}/{model_name}"
+    
     except Exception as e:
         logger.error(f"Error loading model: {str(e)}")
         return False, None, f"Error loading model: {str(e)}" 
