@@ -49,6 +49,7 @@ Thumbs.db
 models/whisper/
 models/language/
 models/base
+models/translation/
 
 # Temporary audio files
 *.temp.wav
