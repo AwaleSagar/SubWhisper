@@ -68,6 +68,9 @@ MODEL_CONFIGS = {
             "size": 131000000,  # ~131MB
             "md5": "7e69ec5451bc261275e5e38408472270",
         }
+    },
+    "translation": {
+        # We don't predefine translation models since they depend on the language pair
     }
 }
 
@@ -284,4 +287,28 @@ def load_model(model_type: str, model_name: str, auto_download: bool = True, no_
     
     except Exception as e:
         logger.error(f"Error loading model: {str(e)}")
-        return False, None, f"Error loading model: {str(e)}" 
+        return False, None, f"Error loading model: {str(e)}"
+
+def get_translation_model_path(config, lang_code):
+    """
+    Get the path for a translation model.
+    
+    Args:
+        config: Application configuration
+        lang_code: Language code for the source language
+        
+    Returns:
+        Path where the translation model should be stored
+    """
+    base_dir = config.translation_model_dir
+    os.makedirs(base_dir, exist_ok=True)
+    
+    # Handle special language codes
+    language_group_mappings = {
+        "zh": "zh-en",
+        "ja": "jap-en",
+        "ko": "kor-en",
+    }
+    
+    model_name = language_group_mappings.get(lang_code, f"{lang_code}-en")
+    return os.path.join(base_dir, f"opus-mt-{model_name}") 

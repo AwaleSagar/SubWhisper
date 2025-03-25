@@ -39,6 +39,49 @@ SUPPORTED_LANGUAGE_CODES = [
     "hr", "sr", "sl", "et", "lt", "lv", "he", "th", "vi", "id", "ms", "fa", "ur"
 ]
 
+# Define language display names for better user experience
+LANGUAGE_DISPLAY_NAMES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "tr": "Turkish",
+    "pl": "Polish",
+    "sv": "Swedish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "fi": "Finnish",
+    "hu": "Hungarian",
+    "cs": "Czech",
+    "el": "Greek",
+    "bg": "Bulgarian",
+    "ro": "Romanian",
+    "sk": "Slovak",
+    "uk": "Ukrainian",
+    "hr": "Croatian",
+    "sr": "Serbian",
+    "sl": "Slovenian",
+    "et": "Estonian",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "he": "Hebrew",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "id": "Indonesian",
+    "ms": "Malay",
+    "fa": "Persian",
+    "ur": "Urdu"
+}
+
 def validate_file_path(file_path: str, must_exist: bool = True) -> Optional[str]:
     """
     Validate a file path.
@@ -151,6 +194,18 @@ def parse_arguments():
     )
     
     parser.add_argument(
+        "--translate-to-english", "-t",
+        choices=["auto", "always", "never"],
+        default="never",
+        help="Translate non-English subtitles to English: 'auto' (ask when detected), 'always' (always translate), 'never' (don't translate, default)"
+    )
+    
+    parser.add_argument(
+        "--translation-model-dir",
+        help="Directory to store downloaded translation models (default: models/translation)"
+    )
+    
+    parser.add_argument(
         "--gpu", "-g",
         action="store_true",
         help="Use GPU acceleration if available"
@@ -260,6 +315,26 @@ def main():
             logger.info(f"Using specified language: {args.language}")
             language = args.language
         
+        # Check if translation is needed
+        translate_subtitles = False
+        if args.translate_to_english != "never" and language != "en":
+            if args.translate_to_english == "always":
+                translate_subtitles = True
+                logger.info(f"Will translate subtitles from {language} to English")
+            elif args.translate_to_english == "auto":
+                # Get language name for better user experience
+                language_name = LANGUAGE_DISPLAY_NAMES.get(language, language)
+                
+                # Prompt user for translation preference
+                translate_prompt = f"Detected language is {language_name} ({language}). Do you want to translate subtitles to English? (y/n): "
+                user_response = input(translate_prompt).strip().lower()
+                
+                if user_response == 'y' or user_response == 'yes':
+                    translate_subtitles = True
+                    logger.info(f"Will translate subtitles from {language} to English")
+                else:
+                    logger.info("Skipping translation as per user choice")
+        
         # Perform speech recognition
         logger.info(f"Performing speech recognition with {args.whisper_model} model")
         speech_recognizer = SpeechRecognizer(config)
@@ -269,6 +344,15 @@ def main():
         logger.info("Generating subtitles")
         subtitle_generator = SubtitleGenerator(config)
         subtitles = subtitle_generator.generate(transcription)
+        
+        # Translate subtitles if needed
+        if translate_subtitles:
+            logger.info(f"Translating subtitles from {language} to English")
+            from src.language.translation import Translator
+            translator = Translator(config)
+            subtitles = translator.translate_subtitles(subtitles, language)
+            # Update language to English after translation
+            language = "en"
         
         # Format and save subtitles
         logger.info(f"Formatting subtitles as {args.format}")

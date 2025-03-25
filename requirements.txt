@@ -24,6 +24,10 @@ langid==1.1.6
 fasttext>=0.9.2 ; platform_system != "Windows"  # Install fasttext on non-Windows
 gensim>=4.0.0 ; platform_system == "Windows"  # Use gensim's fasttext implementation on Windows
 
+# Translation dependencies (all used offline, no API)
+sentencepiece>=0.1.99
+sacremoses>=0.0.53
+
 # Subtitle processing
 pysrt==1.1.2
 webvtt-py==0.4.6

@@ -161,6 +161,7 @@ class Config:
         logger.info(f"  Temp Directory: {self.temp_dir}")
         logger.info(f"  Audio Format: {self.audio_format}")
         logger.info(f"  Audio Sample Rate: {self.audio_sample_rate}")
+        logger.info(f"  Translate to English: {self.translate_to_english}")
         
         if self.config_file:
             logger.info(f"  Config File: {self.config_file}")
@@ -184,6 +185,9 @@ class Config:
             "audio_format": self.audio_format,
             "audio_sample_rate": self.audio_sample_rate,
             "transcription_options": self.transcription_options,
+            "translate_to_english": self.translate_to_english,
+            "translation_batch_size": self.translation_batch_size,
+            "translation_model_dir": self.translation_model_dir,
         }
     
     @handle_exception
@@ -363,4 +367,24 @@ class Config:
         output_dir = os.path.dirname(os.path.abspath(input_path))
         output_file = os.path.join(output_dir, f"{input_name}.{self.format}")
         
-        return output_file 
+        return output_file
+
+    @property
+    def translate_to_english(self) -> str:
+        """Get translation preference."""
+        return self._get_config_value('translate_to_english', 'never')
+
+    @property
+    def translation_batch_size(self) -> int:
+        """Get translation batch size."""
+        return self._get_config_value('translation_batch_size', 8)
+    
+    @property
+    def translation_model_dir(self) -> str:
+        """Get directory for storing translation models."""
+        custom_dir = self._get_config_value('translation_model_dir', None)
+        if custom_dir:
+            return custom_dir
+        else:
+            # Default to models/translation subdirectory
+            return os.path.join(self.get_model_path("base"), "translation") 

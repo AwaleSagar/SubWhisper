@@ -1,0 +1,468 @@
+# SubWhisper Translation Feature Plan
+
+## Feature Overview
+Add functionality to detect non-English subtitles during conversion and offer users the option to translate them to English, using only offline/local models without any external API dependencies.
+
+## Implementation Steps
+
+### 1. Language Detection Enhancement
+- Leverage existing language detection in `src/language/detection.py`
+- The current `LanguageDetector` class already detects languages effectively
+- Add reference mapping of language codes to human-readable names for better user experience
+- Store detected language information in the transcription results
+
+### 2. Command Line Interface Updates
+- Add a new CLI parameter in `main.py`:
+```python
+parser.add_argument(
+    "--translate-to-english", "-t",
+    choices=["auto", "always", "never"],
+    default="never",
+    help="Translate non-English subtitles to English: 'auto' (ask when detected), 'always' (always translate), 'never' (don't translate, default)"
+)
+```
+- Add additional parameter for model path:
+```python
+parser.add_argument(
+    "--translation-model-dir",
+    help="Directory to store downloaded translation models (default: models/translation)"
+)
+```
+
+### 3. Translation Module Implementation
+- Create a new module `src/language/translation.py` with completely offline translation using MarianMT models:
+
+```python
+"""
+Translation module for SubWhisper.
+Uses offline MarianMT models from Hugging Face for translation.
+"""
+
+import os
+import logging
+from typing import List, Dict, Optional, Union
+from tqdm import tqdm
+import torch
+
+from src.utils.config import Config
+from src.utils.model_manager import check_model_exists, download_model
+
+logger = logging.getLogger("subwhisper")
+
+class TranslationError(Exception):
+    """Exception raised for errors in translation."""
+    pass
+
+class Translator:
+    """Subtitle translation class with offline capabilities."""
+    
+    def __init__(self, config: Config):
+        """
+        Initialize translator.
+        
+        Args:
+            config: Application configuration
+        """
+        self.config = config
+        self.device = "cuda" if config.gpu and torch.cuda.is_available() else "cpu"
+        self.translation_model = None
+        self.tokenizer = None
+        self.current_lang = None
+        
+    def _get_model_path(self, model_name: str) -> str:
+        """Get the path where the model should be stored."""
+        base_dir = self.config.translation_model_dir
+        os.makedirs(base_dir, exist_ok=True)
+        return os.path.join(base_dir, model_name.replace("/", "_"))
+        
+    def _load_model(self, source_lang: str) -> None:
+        """
+        Load translation model for the specified source language.
+        
+        Args:
+            source_lang: Source language code (ISO 639-1)
+            
+        Raises:
+            TranslationError: If model loading fails
+        """
+        try:
+            from transformers import MarianMTModel, MarianTokenizer
+            
+            # Skip if already loaded
+            if self.translation_model is not None and self.current_lang == source_lang:
+                return
+                
+            # Model naming convention in Hugging Face: "Helsinki-NLP/opus-mt-{source}-{target}"
+            # For multi-language models: "Helsinki-NLP/opus-mt-{source_group}-{target}"
+            model_name = f"Helsinki-NLP/opus-mt-{source_lang}-en"
+            
+            # Special case handling for certain languages that use different model names
+            language_group_mappings = {
+                "zh": "zh-en",
+                "ja": "jap-en",
+                "ko": "kor-en",
+                # Add more language mappings as needed
+            }
+            
+            if source_lang in language_group_mappings:
+                model_name = f"Helsinki-NLP/opus-mt-{language_group_mappings[source_lang]}"
+            
+            model_path = self._get_model_path(model_name)
+            
+            # Check if model exists locally
+            if not os.path.exists(model_path):
+                logger.info(f"Translation model not found locally: {model_name}")
+                
+                # Prompt the user for download confirmation
+                download_prompt = f"Translation model for {source_lang} is not installed. Do you want to download it now? (y/n): "
+                user_response = input(download_prompt).strip().lower()
+                
+                if user_response != 'y' and user_response != 'yes':
+                    error_message = "Model download cancelled. Cannot translate without model."
+                    logger.error(error_message)
+                    raise TranslationError(error_message)
+                
+                logger.info(f"Downloading translation model: {model_name}")
+                
+            logger.info(f"Loading translation model: {model_name}")
+            
+            # Load model and tokenizer
+            self.tokenizer = MarianTokenizer.from_pretrained(model_name, cache_dir=model_path)
+            self.translation_model = MarianMTModel.from_pretrained(model_name, cache_dir=model_path).to(self.device)
+            self.current_lang = source_lang
+            
+            logger.info(f"Translation model loaded successfully")
+            
+        except Exception as e:
+            error_message = f"Failed to load translation model: {str(e)}"
+            logger.error(error_message)
+            raise TranslationError(error_message)
+    
+    def translate_text(self, text: str, source_lang: str) -> str:
+        """
+        Translate a single text from source language to English.
+        
+        Args:
+            text: Text to translate
+            source_lang: Source language code (ISO 639-1)
+            
+        Returns:
+            Translated text in English
+            
+        Raises:
+            TranslationError: If translation fails
+        """
+        try:
+            # Skip translation if already English
+            if source_lang == "en":
+                return text
+                
+            # Skip empty text
+            if not text.strip():
+                return text
+                
+            # Load model if not already loaded or if language changed
+            if self.translation_model is None or self.current_lang != source_lang:
+                self._load_model(source_lang)
+                
+            # Tokenize and translate
+            inputs = self.tokenizer(text, return_tensors="pt", padding=True).to(self.device)
+            translated = self.translation_model.generate(**inputs)
+            translated_text = self.tokenizer.decode(translated[0], skip_special_tokens=True)
+            
+            return translated_text
+            
+        except Exception as e:
+            error_message = f"Translation failed: {str(e)}"
+            logger.error(error_message)
+            # Return original text if translation fails
+            return text
+    
+    def translate_batch(self, texts: List[str], source_lang: str, 
+                       batch_size: int = 8) -> List[str]:
+        """
+        Translate a batch of texts from source language to English.
+        
+        Args:
+            texts: List of texts to translate
+            source_lang: Source language code (ISO 639-1)
+            batch_size: Number of texts to translate in one batch
+            
+        Returns:
+            List of translated texts in English
+        """
+        try:
+            # Skip translation if already English
+            if source_lang == "en":
+                return texts
+                
+            # Load model if not already loaded
+            if self.translation_model is None or self.current_lang != source_lang:
+                self._load_model(source_lang)
+            
+            results = []
+            
+            # Process in batches with progress bar
+            for i in tqdm(range(0, len(texts), batch_size), desc="Translating", unit="batch"):
+                batch = texts[i:i+batch_size]
+                # Filter out empty strings to avoid tokenization issues
+                batch_texts = [text for text in batch if text.strip()]
+                
+                if not batch_texts:
+                    # If all texts in batch are empty, add them as is
+                    results.extend(batch)
+                    continue
+                
+                # Tokenize and translate
+                inputs = self.tokenizer(batch_texts, return_tensors="pt", padding=True).to(self.device)
+                translated = self.translation_model.generate(**inputs)
+                translated_texts = [self.tokenizer.decode(t, skip_special_tokens=True) 
+                                   for t in translated]
+                
+                # Match original batch size by re-inserting empty strings
+                batch_results = []
+                translated_idx = 0
+                for text in batch:
+                    if text.strip():
+                        batch_results.append(translated_texts[translated_idx])
+                        translated_idx += 1
+                    else:
+                        batch_results.append(text)
+                
+                results.extend(batch_results)
+            
+            return results
+            
+        except Exception as e:
+            error_message = f"Batch translation failed: {str(e)}"
+            logger.error(error_message)
+            # Return original texts if translation fails
+            return texts
+    
+    def translate_subtitles(self, subtitles: List[Dict], source_lang: str) -> List[Dict]:
+        """
+        Translate subtitles from source language to English.
+        
+        Args:
+            subtitles: List of subtitle dictionaries with 'text' keys
+            source_lang: Source language code (ISO 639-1)
+            
+        Returns:
+            List of subtitle dictionaries with translated 'text' values
+        """
+        logger.info(f"Translating subtitles from {source_lang} to English")
+        
+        try:
+            # Extract text from subtitles
+            texts = [sub['text'] for sub in subtitles]
+            
+            # Translate texts
+            translated_texts = self.translate_batch(texts, source_lang, 
+                                                   self.config.translation_batch_size)
+            
+            # Update subtitles with translated text
+            translated_subtitles = []
+            for i, sub in enumerate(subtitles):
+                translated_sub = sub.copy()
+                translated_sub['text'] = translated_texts[i]
+                # Keep the original text for reference
+                translated_sub['original_text'] = sub['text']
+                translated_subtitles.append(translated_sub)
+            
+            logger.info(f"Translation completed successfully")
+            return translated_subtitles
+            
+        except Exception as e:
+            error_message = f"Subtitle translation failed: {str(e)}"
+            logger.error(error_message)
+            # Return original subtitles if translation fails
+            return subtitles
+```
+
+### 4. Pipeline Integration
+- Update the main.py file to integrate the translation step:
+
+```python
+# After language detection and before subtitle generation
+
+# Initialize translator if needed
+if args.translate_to_english != "never" and language != "en":
+    translate_subtitles = False
+    
+    if args.translate_to_english == "always":
+        translate_subtitles = True
+        logger.info(f"Will translate subtitles from {language} to English")
+    elif args.translate_to_english == "auto":
+        # Get language name for better user experience
+        language_name = LANGUAGE_DISPLAY_NAMES.get(language, language)
+        
+        # Prompt user for translation preference
+        translate_prompt = f"Detected language is {language_name} ({language}). Do you want to translate subtitles to English? (y/n): "
+        user_response = input(translate_prompt).strip().lower()
+        
+        if user_response == 'y' or user_response == 'yes':
+            translate_subtitles = True
+            logger.info(f"Will translate subtitles from {language} to English")
+        else:
+            logger.info("Skipping translation as per user choice")
+    
+    # Perform translation if needed
+    if translate_subtitles:
+        logger.info("Initializing translator")
+        from src.language.translation import Translator
+        translator = Translator(config)
+```
+
+- Then update the subtitle generation section:
+
+```python
+# Generate subtitles
+logger.info("Generating subtitles")
+subtitle_generator = SubtitleGenerator(config)
+subtitles = subtitle_generator.generate(transcription)
+
+# Translate subtitles if needed
+if translate_subtitles:
+    logger.info(f"Translating subtitles from {language} to English")
+    subtitles = translator.translate_subtitles(subtitles, language)
+    # Update language to English after translation
+    language = "en"
+```
+
+### 5. Language Names Mapping
+- Add a language display names mapping at the top of main.py:
+
+```python
+# Define language display names for better user experience
+LANGUAGE_DISPLAY_NAMES = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "tr": "Turkish",
+    "pl": "Polish",
+    "sv": "Swedish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "fi": "Finnish",
+    "hu": "Hungarian",
+    "cs": "Czech",
+    "el": "Greek",
+    "bg": "Bulgarian",
+    "ro": "Romanian",
+    "sk": "Slovak",
+    "uk": "Ukrainian",
+    "hr": "Croatian",
+    "sr": "Serbian",
+    "sl": "Slovenian",
+    "et": "Estonian",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "he": "Hebrew",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "id": "Indonesian",
+    "ms": "Malay",
+    "fa": "Persian",
+    "ur": "Urdu"
+}
+```
+
+### 6. Configuration Updates
+- Add translation-related options to the Config class in `src/utils/config.py`:
+
+```python
+# Add these properties to the Config class
+@property
+def translate_to_english(self) -> str:
+    """Get translation preference."""
+    return self.args.translate_to_english
+
+@property
+def translation_batch_size(self) -> int:
+    """Get translation batch size."""
+    return getattr(self.args, 'translation_batch_size', 8)
+    
+@property
+def translation_model_dir(self) -> str:
+    """Get directory for storing translation models."""
+    if hasattr(self.args, 'translation_model_dir') and self.args.translation_model_dir:
+        return self.args.translation_model_dir
+    else:
+        # Default to models/translation subdirectory
+        return os.path.join(self.get_model_path("base"), "translation")
+```
+
+### 7. Model Management Extension
+- Update the model manager in `src/utils/model_manager.py` to handle translation models:
+
+```python
+def get_translation_model_path(config, lang_code):
+    """
+    Get the path for a translation model.
+    
+    Args:
+        config: Application configuration
+        lang_code: Language code for the source language
+        
+    Returns:
+        Path where the translation model should be stored
+    """
+    base_dir = config.translation_model_dir
+    os.makedirs(base_dir, exist_ok=True)
+    
+    # Handle special language codes
+    language_group_mappings = {
+        "zh": "zh-en",
+        "ja": "jap-en",
+        "ko": "kor-en",
+    }
+    
+    model_name = language_group_mappings.get(lang_code, f"{lang_code}-en")
+    return os.path.join(base_dir, f"opus-mt-{model_name}")
+```
+
+### 8. Dependencies
+- Add new dependencies to requirements.txt:
+```
+# Translation dependencies (all used offline, no API)
+sentencepiece>=0.1.99
+sacremoses>=0.0.53
+```
+
+### 9. Testing
+- Test with common languages (Spanish, French, German, etc.)
+- Test with challenging languages (Japanese, Chinese, Arabic, etc.)
+- Test with all subtitle formats
+- Test all command line options
+- Test model download and offline usage
+- Test behavior with and without internet connection
+
+### 10. Documentation
+- Update README.md with translation feature section
+- Update help text in CLI
+- Add examples of translation usage
+- Document offline capabilities and model storage
+
+## Implementation Timeline
+1. Language detection enhancement and model management - Day 1
+2. Translation module implementation - Days 2-3
+3. CLI integration and user interaction - Day 4
+4. Testing and error handling - Days 5-6
+5. Documentation and finalization - Day 7
+
+## Future Enhancements
+- Support for multi-language subtitle files
+- Option to translate to languages other than English (still offline)
+- Memory optimization for low-resource systems
+- Quality metrics for translation
+- Translation memory to improve consistency across projects 
